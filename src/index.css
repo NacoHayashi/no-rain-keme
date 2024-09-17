@@ -1,27 +1,14 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-#imageContainer, #canvasContainer {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 10px;
-    min-height: 120px;
-    border: 1px solid #ccc;
-    padding: 10px;
-}
+
 #canvasContainer {
     width: 500px;
     height: 500px;
     position: relative;
     overflow: hidden;
 }
-.draggable {
-    width: 100px;
-    height: 100px;
-    cursor: pointer;
-    user-select: none;
-}
+
 .clone {
     position: absolute;
     z-index: 1;
@@ -48,3 +35,14 @@
 #colorPicker, #brushSize {
     margin-right: 10px;
 }
+
+@keyframes wiggle {
+    0%, 100% { transform: rotate(-3deg); }
+    50% { transform: rotate(3deg); }
+  }
+  
+  @layer utilities {
+    .animate-wiggle {
+      animation: wiggle 0.3s ease-in-out;
+    }
+  }
