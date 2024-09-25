@@ -7,7 +7,7 @@ function App() {
       <div className='text-gray-700 space-y-10 max-w-2xl w-full'>
         <div className='space-y-2'>
           <h3 className='text-3xl'>晴天烏龜</h3>
-          <h4 className='text-gray-400'>點擊下方圖案佈置你的烏龜圖</h4>
+          <h4 className='text-gray-400'>抓取下方圖案移動到畫布上佈置你的烏龜圖</h4>
         </div>
         <DrawBoard />
       </div>

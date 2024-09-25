@@ -8,6 +8,7 @@ interface Layer {
   position: { x: number; y: number };
   size: { width: number; height: number };
   lastModified: number;
+  isNew: boolean;
 }
 
 const ImageOnlyDragComponent: React.FC = () => {
@@ -30,7 +31,26 @@ const ImageOnlyDragComponent: React.FC = () => {
     };
   }, []);
 
-  const addImageLayer = (imgSrc: string): void => {
+  const handleDragStart = (event: React.DragEvent<HTMLImageElement>, imgSrc: string) => {
+    event.dataTransfer.setData('text/plain', imgSrc);
+  };
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const imgSrc = event.dataTransfer.getData('text/plain');
+    const rect = canvasContainerRef.current?.getBoundingClientRect();
+    if (rect) {
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      addImageLayer(imgSrc, { x, y });
+    }
+  };
+
+  const addImageLayer = (imgSrc: string, position: { x: number; y: number }): void => {
     const img = new Image();
     img.onload = () => {
       const maxSize = 100;
@@ -50,9 +70,10 @@ const ImageOnlyDragComponent: React.FC = () => {
       const newLayer: Layer = {
         id: Date.now(),
         content: imgSrc,
-        position: { x: 0, y: 0 },
+        position: position,
         size: { width, height },
         lastModified: Date.now(),
+        isNew: true
       };
       setLayers(prevLayers => [...prevLayers, newLayer]);
       setSelectedLayerId(newLayer.id);
@@ -60,10 +81,10 @@ const ImageOnlyDragComponent: React.FC = () => {
     img.src = imgSrc;
   };
 
-  const updateLayerPosition = (id: number, newPosition: { x: number; y: number }): void => {
+  const updateLayerPosition = (id: number, newPosition: { x: number; y: number }, isNew: boolean): void => {
     setLayers(prevLayers =>
       prevLayers.map(layer =>
-        layer.id === id ? { ...layer, position: newPosition, lastModified: Date.now() } : layer
+        layer.id === id ? { ...layer, position: newPosition, lastModified: Date.now(), isNew } : layer
       )
     );
   };
@@ -111,9 +132,16 @@ const ImageOnlyDragComponent: React.FC = () => {
               move(event) {
                 setSelectedLayerId(layer.id);
                 const target = event.target as HTMLElement;
-                const x = (parseFloat(target.getAttribute('data-x') || '0') || 0) + event.dx;
-                const y = (parseFloat(target.getAttribute('data-y') || '0') || 0) + event.dy;
-                updateLayerPosition(layer.id, { x, y });
+                let x, y;
+                if (layer.isNew) {
+                  x = layer.position.x;
+                  y = layer.position.y;
+
+                } else {
+                  x = (parseFloat(target.getAttribute('data-x') || '0') || 0) + event.dx;
+                  y = (parseFloat(target.getAttribute('data-y') || '0') || 0) + event.dy;
+                }
+                updateLayerPosition(layer.id, { x, y }, false);
                 target.style.transform = `translate(${x}px, ${y}px)`;
                 target.setAttribute('data-x', x.toString());
                 target.setAttribute('data-y', y.toString());
@@ -158,19 +186,47 @@ const ImageOnlyDragComponent: React.FC = () => {
     { label: "sun", url: "/images/sun.png", }
   ];
 
+  const [isBurning, setIsBurning] = useState(false);
+  const burningImageRef = useRef<HTMLImageElement>(null);
+
+  const sacrificeTurtle = async () => {
+    if (!canvasContainerRef.current) return;
+
+    // 1. 保存当前画布内容为图片
+    const canvas = await html2canvas(canvasContainerRef.current);
+    const imageDataUrl = canvas.toDataURL('image/png');
+
+    // 2. 设置燃烧状态为true，触发动画
+    setIsBurning(true);
+
+    // 3. 设置保存的图片到燃烧图层
+    if (burningImageRef.current) {
+      burningImageRef.current.src = imageDataUrl;
+    }
+
+    // 4. 5秒后重置状态
+    setTimeout(() => {
+      setIsBurning(false);
+      // 这里可以添加其他需要的操作，比如清空画布等
+    }, 5000);
+  };
+
   return (
-    <div onClick={() => setSelectedLayerId(null)}  className='space-y-5'>
+    <div onClick={() => setSelectedLayerId(null)} className='space-y-5'>
       <div className="flex gap-4 items-center">
         {imgs.map(img => (
-          <div key={img.label} className="w-20 h-20 flex items-center cursor-pointer  select-none">
-            <img src={img.url} alt={img.label} onClick={() => addImageLayer(img.url)} />
+          <div key={img.label} className="w-20 h-20 flex items-center cursor-grab  select-none">
+            <img src={img.url} alt={img.label} onDragStart={(e) => handleDragStart(e, img.url)}
+              draggable />
           </div>
         ))}
       </div>
 
       <div
         ref={canvasContainerRef}
-        className=' shadow-md rounded-lg max-w-full w-[500px] h-[500px] border border-gray-300 relative overflow-hidden'
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+        className=' shadow-md rounded-lg max-w-full w-full h-[500px] border border-gray-300 relative overflow-hidden'
       >
         {sortedLayers.map((layer, index) => (
           <div
@@ -199,7 +255,17 @@ const ImageOnlyDragComponent: React.FC = () => {
           </div>
         ))}
       </div>
-      <div>
+      {isBurning && (
+        <div className="absolute top-0 left-0 w-full h-full">
+          <img
+            ref={burningImageRef}
+            className="w-full h-full object-cover animate-fade-out"
+            alt="Burning turtle"
+          />
+          <div className="absolute top-0 left-0 w-full h-full bg-orange-500 opacity-50 animate-flicker" />
+        </div>
+      )}
+      <div className='flex justify-between items-center'>
         <button
           onClick={captureImage}
           className="group relative inline-flex items-center justify-center p-4 px-6 py-3 overflow-hidden font-medium text-indigo-600 transition duration-300 ease-out border-2 border-indigo-500 rounded-full shadow-md"
@@ -211,6 +277,19 @@ const ImageOnlyDragComponent: React.FC = () => {
           </span>
           <span className="absolute flex items-center justify-center w-full h-full text-indigo-500 transition-all duration-300 transform group-hover:translate-x-full ease">下載我的烏龜圖</span>
           <span className="relative invisible">下載我的烏龜圖</span>
+        </button>
+        <button
+          onClick={sacrificeTurtle}
+          className="group relative inline-flex items-center justify-center p-4 px-6 py-3 overflow-hidden font-medium text-indigo-600 transition duration-300 ease-out border-2 border-red-500 rounded-full shadow-md"
+        >
+          <span className="absolute inset-0 flex items-center justify-center w-full h-full text-white duration-300 -translate-x-full bg-red-500 group-hover:translate-x-0 ease">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"></path>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z"></path>
+            </svg>
+          </span>
+          <span className="absolute flex items-center justify-center w-full h-full text-red-500 transition-all duration-300 transform group-hover:translate-x-full ease">獻祭烏龜圖</span>
+          <span className="relative invisible">獻祭烏龜圖</span>
         </button>
       </div>
     </div>
